@@ -1,0 +1,23 @@
+{
+  "name": "jw-crawler",
+  "version": "1.0.0",
+  "description": "广东信息工程职业学院教务系统爬虫",
+  "main": "crawler.js",
+  "scripts": {
+    "start": "node crawler.js",
+    "test:parse": "node -e \"const JwCrawler=require('./crawler'); new JwCrawler().testParseLocal();\""
+  },
+  "keywords": [
+    "crawler",
+    "jw",
+    "gdip"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.2",
+    "axios-cookiejar-support": "^5.0.3",
+    "cheerio": "^1.0.0-rc.12",
+    "tough-cookie": "^4.1.4"
+  }
+}
