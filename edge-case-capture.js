@@ -10,16 +10,51 @@
  *   5. 跨学期边界（放假前后的课表行为）
  *
  * 使用方法：
- *   1. 先正常登录一次
- *   2. node edge-case-capture.js
+ *   1. 设置 JW_ACCOUNT/JW_PASSWORD，或传入 --account/--password
+ *   2. node edge-case-capture.js --ocr --captcha-attempts 3
  *   3. 脚本会自动抓取各种边界日期的课表 HTML
  *   4. 结果保存在 ./edge_case_samples/ 目录
- *
- * 前置条件：需要先登录，证书问题请确认已信任自签名证书
  */
 
 const JwCrawler = require('./crawler');
 const fs = require('fs').promises;
+
+function parseCliArgs(argv) {
+  const args = {};
+  for (let i = 0; i < argv.length; i++) {
+    const item = argv[i];
+    if (!item.startsWith('--')) continue;
+    const key = item.slice(2);
+    const next = argv[i + 1];
+    if (next && !next.startsWith('--')) {
+      args[key] = next;
+      i++;
+    } else {
+      args[key] = true;
+    }
+  }
+  return args;
+}
+
+function readBool(value, fallback = false) {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'boolean') return value;
+  return /^(1|true|yes|on)$/i.test(String(value));
+}
+
+function ask(question) {
+  const readline = require('readline').createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  return new Promise(resolve => {
+    readline.question(question, answer => {
+      readline.close();
+      resolve(answer);
+    });
+  });
+}
 
 // ============ 边界场景配置 ============
 const SCENARIOS = [
@@ -98,6 +133,8 @@ async function sleep(ms) {
 }
 
 async function captureEdgeCases() {
+  const args = parseCliArgs(process.argv.slice(2));
+
   console.log('══════════════════════════════════════════════');
   console.log('  特殊场景课表样本抓取');
   console.log('══════════════════════════════════════════════\n');
@@ -111,6 +148,10 @@ async function captureEdgeCases() {
     jitter: 500,
     maxRetries: 2,
     verbose: true,
+    useOcr: args.ocr !== undefined ? readBool(args.ocr, true) : readBool(process.env.JW_USE_OCR, false),
+    captchaPath: args['captcha-path'] || process.env.JW_CAPTCHA_PATH || './captcha.png',
+    maxCaptchaAttempts: Number(args['captcha-attempts'] || process.env.JW_CAPTCHA_ATTEMPTS || 1),
+    minOcrConfidence: Number(args['ocr-min-confidence'] || process.env.JW_OCR_MIN_CONFIDENCE || 0),
   });
 
   // 先测试本地解析是否正常
@@ -123,37 +164,52 @@ async function captureEdgeCases() {
     return;
   }
 
-  // 这里需要用户登录后才能在线抓取
-  console.log('─── 以下场景需要在线抓取 ───');
-  console.log('请先运行 crawler.js 登录，然后取消下面的注释重新运行\n');
-
   const summary = [];
   let totalSuccess = 0;
   let totalFail = 0;
 
+  const userAccount = args.account || process.env.JW_ACCOUNT;
+  const userPassword = args.password || process.env.JW_PASSWORD;
 
-  // ========== 在线抓取（需要先登录）==========
-  // 取消注释以下代码以启用在线抓取
+  if (!userAccount || !userPassword) {
+    console.log('未提供账号或密码，已跳过在线抓取。');
+    console.log('需要在线抓取时可使用 --account/--password，或设置 JW_ACCOUNT/JW_PASSWORD。');
+    console.log(`样本保存目录：${saveDir}/`);
+    return summary;
+  }
 
-  const userAccount = '2025220502332';
-  const userPassword = '你的密码';
+  const manualCaptcha = args.captcha || process.env.JW_CAPTCHA || '';
+  const promptCaptcha = async () => ask('验证码: ');
+  const loginMode = args['login-mode'] || process.env.JW_LOGIN_MODE || 'direct';
 
-  // 获取验证码
-  await crawler.getCaptcha('./captcha.png');
-  console.log('验证码已保存到 captcha.png，请查看后输入：');
-
-  const readline = require('readline').createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-  const randomCode = await new Promise(resolve => {
-    readline.question('验证码: ', answer => {
-      readline.close();
-      resolve(answer.trim());
+  if (loginMode === 'unified') {
+    await crawler.loginWithCaptcha(userAccount, userPassword, {
+      useOcr: crawler.options.useOcr,
+      manualCaptcha,
+      promptCaptcha,
     });
-  });
-
-  await crawler.login(userAccount, userPassword, randomCode);
+  } else if (loginMode === 'auto') {
+    try {
+      await crawler.loginWithCaptcha(userAccount, userPassword, {
+        useOcr: crawler.options.useOcr,
+        manualCaptcha,
+        promptCaptcha,
+      });
+    } catch (err) {
+      console.warn(`[登录] 统一认证失败，改用教务子系统直登: ${err.message}`);
+      await crawler.loginJsxsdWithCaptcha(userAccount, userPassword, {
+        useOcr: crawler.options.useOcr,
+        manualCaptcha: '',
+        promptCaptcha,
+      });
+    }
+  } else {
+    await crawler.loginJsxsdWithCaptcha(userAccount, userPassword, {
+      useOcr: crawler.options.useOcr,
+      manualCaptcha,
+      promptCaptcha,
+    });
+  }
 
   for (const scenario of SCENARIOS) {
     console.log(`\n─── ${scenario.label} ───`);

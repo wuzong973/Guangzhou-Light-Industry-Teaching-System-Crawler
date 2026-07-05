@@ -1,23 +1,28 @@
 {
   "name": "jw-crawler",
   "version": "1.0.0",
-  "description": "广东信息工程职业学院教务系统爬虫",
+  "description": "广东信息工程职业学院教务系统课表爬虫",
+  "license": "MIT",
   "main": "crawler.js",
   "scripts": {
-    "start": "node crawler.js",
-    "test:parse": "node -e \"const JwCrawler=require('./crawler'); new JwCrawler().testParseLocal();\""
+    "server": "node server.js",
+    "encrypt:env": "node tools/encrypt-env.js",
+    "parse": "node crawler.js --parse-only",
+    "ocr": "node captcha-ocr.js captcha.png",
+    "login": "node crawler.js --login-only --ocr --captcha-attempts 3",
+    "crawl": "node crawler.js --ocr --captcha-attempts 3",
+    "edge": "node edge-case-capture.js --ocr --captcha-attempts 3",
+    "check": "node --check crawler.js && node --check captcha-ocr.js && node --check edge-case-capture.js && node --check waf-test.js && node --check server.js && node --check tools/encrypt-env.js"
   },
-  "keywords": [
-    "crawler",
-    "jw",
-    "gdip"
-  ],
-  "author": "",
-  "license": "MIT",
   "dependencies": {
     "axios": "^1.7.2",
     "axios-cookiejar-support": "^5.0.3",
     "cheerio": "^1.0.0-rc.12",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "sharp": "^0.33.5",
+    "tesseract.js": "^5.1.1",
     "tough-cookie": "^4.1.4"
   }
 }
